@@ -25,4 +25,7 @@ app.use('/comments', commentRouter);
 
 // Set Router
 const indexRouter = require('./routes/index');
-app.use('/', indexRouter);
+app.use('/', indexRouter); app.use(function (err, req, res, next) {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
