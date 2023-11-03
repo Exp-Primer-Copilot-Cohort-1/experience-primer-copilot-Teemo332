@@ -1,31 +1,58 @@
-// Create Web Server
-const express = require('express');
-const bodyParser = require('body-parser');
-const app = express();
-const port = 3000;
+// Create web server
+const express = require('express')
+const bodyParser = require('body-parser')
+const axios = require('axios')
+const cors = require('cors')
 
-// Create Web Server
-app.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
-});
+const app = express()
 
-// Set Static File
-app.use(express.static('public'));
+app.use(bodyParser.json())
+app.use(cors())
 
-// Set Body Parser
-app.use(bodyParser.urlencoded({ extended: true }));
+const commentsByPostId = {}
 
-// Set View Engine
-app.set('views', './views');
-app.set('view engine', 'ejs');
+const handleEvent = (type, data) => {
+  if (type === 'CommentCreated') {
+    const { id, content, postId, status } = data
+    const comments = commentsByPostId[postId] || []
 
-// Set Router
-const commentRouter = require('./routes/comments');
-app.use('/comments', commentRouter);
+    comments.push({ id, content, status })
+    commentsByPostId[postId] = comments
+  }
 
-// Set Router
-const indexRouter = require('./routes/index');
-app.use('/', indexRouter); app.use(function (err, req, res, next) {
-    console.error(err.stack);
-    res.status(500).send('Something broke!');
-});
+  if (type === 'CommentUpdated') {
+    const { id, content, postId, status } = data
+    const comments = commentsByPostId[postId]
+    const comment = comments.find((comment) => comment.id === id)
+
+    comment.status = status
+    comment.content = content
+  }
+}
+
+app.get('/posts/:id/comments', (req, res) => {
+  const { id } = req.params
+  const comments = commentsByPostId[id] || []
+
+  res.send(comments)
+})
+
+app.post('/events', (req, res) => {
+  const { type, data } = req.body
+
+  handleEvent(type, data)
+
+  res.send({})
+})
+
+app.listen(4001, async () => {
+  console.log('Listening on port 4001')
+
+  const res = await axios.get('http://event-bus-srv:4005/events')
+
+  for (let event of res.data) {
+    console.log('Processing event:', event.type)
+
+    handleEvent(event.type, event.data)
+  }
+})
