@@ -1,86 +1,67 @@
-// Create Web server
-// Load Node modules
-const express = require('express');
-const app = express();
-const bodyParser = require('body-parser');
-const mysql = require('mysql');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+// Create Web Server
+const http = require('http');
 const fs = require('fs');
+const url = require('url');
+const qs = require('querystring');
+const template = require('./lib/template.js');
 const path = require('path');
+const sanitizeHtml = require('sanitize-html');
 
-// Create connection
-const conn = mysql.createConnection({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'db_comments'
-});
+// Create Web Server
+const app = http.createServer((req, res) => {
+    const _url = req.url;
+    const queryData = url.parse(_url, true).query;
+    const pathname = url.parse(_url, true).pathname;
+    let title = queryData.id;
+    let description = queryData.id;
+    let id = queryData.id;
 
-// Connect to database
-conn.connect((err) => {
-    if (err) throw err;
-    console.log('Mysql Connected...');
-});
-
-// Set cors
-app.use(cors());
-
-// Set body parser
-app.use(bodyParser.json());
-
-// Set static folder
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Set port
-const port = 5000;
-
-// Listen port
-app.listen(port, () => console.log(`Server started on port ${port}`));
-
-// Create API
-// Create user
-app.post('/api/users/register', (req, res) => {
-    const data = {
-        name: req.body.name,
-        email: req.body.email,
-        password: bcrypt.hashSync(req.body.password, 10),
-        image: 'default.png'
-    };
-
-    // Check email exists
-    const sql = `SELECT * FROM users WHERE email = '${data.email}'`;
-    conn.query(sql, (err, result) => {
-        if (err) throw err;
-        if (result.length > 0) {
-            res.json({
-                status: 400,
-                message: 'Email already exists'
+    if (pathname === '/') {
+        if (queryData.id === undefined) {
+            fs.readdir('./data', (err, filelist) => {
+                title = 'Welcome';
+                description = 'Hello, Node.js';
+                const list = template.list(filelist);
+                const html = template.html(title, list, `<h2>${title}</h2>${description}`, `<a href="/create">create</a>`);
+                res.writeHead(200);
+                res.end(html);
             });
         } else {
-            // Insert data
-            const sql = 'INSERT INTO users SET ?';
-            conn.query(sql, data, (err, result) => {
-                if (err) throw err;
-                res.json({
-                    status: 200,
-                    message: 'User registered successfully'
+            fs.readdir('./data', (err, filelist) => {
+                title = queryData.id;
+                const filteredId = path.parse(title).base;
+                fs.readFile(`./data/${filteredId}`, 'utf8', (err, description) => {
+                    const sanitizedTitle = sanitizeHtml(title);
+                    const sanitizedDescription = sanitizeHtml(description, {
+                        allowedTags: ['h1']
+                    });
+                    const list = template.list(filelist);
+                    const html = template.html(sanitizedTitle, list, `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`, `<a href="/create">create</a>
+                    <a href="/update?id=${sanitizedTitle}">update</a>
+                    <form action="delete_process" method="post" onsubmit="return confirm('Are you sure?')">
+                        <input type="hidden" name="id" value="${sanitizedTitle}">
+                        <input type="submit" value="delete">
+                    </form>`);
+                    res.writeHead(200);
+                    res.end(html);
                 });
             });
         }
-    });
-});
-
-// Login user
-app.post('/api/users/login', (req, res) => {
-    const data = {
-        email: req.body.email,
-        password: req.body.password
-    };
-
-    // Check email exists
-    const sql = `SELECT * FROM users WHERE email = '${data.email}'`;
-    conn.query(sql, (err, result) => {
-        if (err) throw err;
-        if (result.length > 0) {
+    } else if (pathname === '/create') {
+        fs.readdir('./data', (err, filelist) => {
+            title = 'WEB - create';
+            const list = template.list(filelist);
+            const html = template.html(title, list, `
+                <form action="/create_process" method="post">
+                    <p><input type="text" name="title" placeholder="title"></p>
+                    <p>
+                        <textarea name="description" id="" cols="30" rows="10" placeholder="description"></textarea>
+                    </p>
+                    <p>
+                        <input type="submit">
+                    </p>
+                </form>
+            `, '');
+            res.writeHead(200);
+            res.end(html);
+        }
